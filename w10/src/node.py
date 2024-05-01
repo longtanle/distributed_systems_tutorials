@@ -8,26 +8,32 @@ from network import recv_prefixed, send_prefixed
 
 class MyTCPServer(socketserver.ThreadingTCPServer):
 	def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True):
-		# TODO initialize self.blockchain and self.blockchain_lock
+		self.blockchain = Blockchain()
+		self.blockchain_lock = Lock()
 		super().__init__(server_address, RequestHandlerClass, bind_and_activate)
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 	server: MyTCPServer
 
 	def handle(self):
-		# TODO create an infinite loop with the following steps
-		# 1. receive data from the client using recv_prefixed and self.request
-		# break to exit the loop in case of exception
-		# 2. print the received data
-		# 3. add the transaction to blockchain. use self.blockchain_lock to avoid data race
-		# 4. send the response to the client using send_prefixed
-		pass
+		while True:
+			try:
+				data = recv_prefixed(self.request).decode()
+			except:
+				break
+			print("Received from {}:".format(self.client_address[0]))
+			print(data)
+			with self.server.blockchain_lock:
+				added = self.server.blockchain.add_transaction(data)
+			send_prefixed(self.request, json.dumps({'response': added}).encode())
 
 if __name__ == '__main__':
-	# TODO setup ArgumentParser with a required port argument of type int
+	parser = ArgumentParser()
+	parser.add_argument('port', type=int)
+	args = parser.parse_args()
+	port: int = args.port
 
 	HOST = 'localhost'
 
-	# TODO create an instance of MyTCPServer with the host, port, and MyTCPHandler
-	# and use serve_forever to serve the requests. This will keep running until you
-	# interrupt the program with Ctrl-C
+	with MyTCPServer((HOST, port), MyTCPHandler) as server:
+		server.serve_forever()
